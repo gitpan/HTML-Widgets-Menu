@@ -17,7 +17,7 @@ require AutoLoader;
 	new menu format html show
 	
 );
-$VERSION = '0.02';
+$VERSION = '0.09';
 
 $DEBUG=0;
 
@@ -108,6 +108,43 @@ sub home {
 	$self->{home}=$home;
 }
 
+sub title {
+	my $self=shift;
+	my $separator=(shift or '-');
+	my $item;
+	my $title="";
+	foreach (@{$self->active}) {
+		unless (defined $item) {
+			$item=$_;
+			next;
+		}
+		$title.=$separator if length $title;
+		$title.=$item;
+		undef $item;
+	}
+	return $title;
+}
+
+
+sub path {
+	my $self=shift;
+	my $separator=(shift or '/');
+	my $item;
+	my $path="";
+	foreach (@{$self->active}) {
+		unless (defined $item) {
+			$item=$_;
+			next;
+		}
+		$path.=$separator if length $path;
+		$path.="<A HREF=\"$_\">$item</A>";
+		undef $item;
+	}
+	return $path;
+}
+
+
+
 sub show {
 	my $self=shift;
 	my %arg=@_;
@@ -121,14 +158,17 @@ sub html {
 	my $self=shift;
 	$self->set_url();
 	$self->build_active unless defined $self->{active};
-	my $html=($self->{html} or $self->build_html);
-	$self->{html}=$html;
+	return $self->{html} if exists $self->{html}
+							&& defined $self->{html};
+	$self->{html}=$self->build_html(@_);
 	return $self->{html};
 }
 
 sub active {
 	my $self=shift;
-	$self->build_active unless defined $self->{active};
+	return $self->{active} if defined $self->{active};
+	$self->set_url;
+	$self->build_active;
 	return $self->{active};
 }
 
@@ -162,6 +202,7 @@ sub set_url {
 sub build_active {
 	my $self=shift;
 	return if defined $self->{active};
+	print "\nBuilding active for $self->{url}\n" if $DEBUG;
 	$self->recurse_build_active();
 	my $active=$self->{active};
 	my @rev;
@@ -186,6 +227,7 @@ sub recurse_build_active {
 				or $self->{menu}
 				or []);
 	my $path=($arg{path} or $self->{path} or "");
+	print "path=$path\n" if $DEBUG;
 	my $key;
 	my $bActive=0;
 	foreach (@$menu) {
@@ -209,13 +251,18 @@ sub recurse_build_active {
 			undef $key;
 			next;
 		}
+		print "\titem=$_->{url}\n" if $DEBUG;
 		$_->{url}=~s!/$!!;
+		
 		$_->{abs_url}=$_->{url};
 		$_->{abs_url}=$path.$_->{url} unless $_->{url}=~/^\w+:/;
 		$_->{abs_url}.="/" unless $_->{url}=~m!(\.\w+|/)$!
 						or $_->{url}=~/^\w+:/;
-		my $next_path="";
-		$next_path=$_->{abs_url} if $_->{abs_url}=~m!/$!;
+		my $next_path=$path;
+		$next_path.=$_->{url} if $_->{abs_url}=~m!/$!;
+		$next_path.="/" if $_->{abs_url}=~m!/$!;
+
+		$next_path=~s#//+#/#g;
 		if ($self->recurse_build_active(menu=>$_->{menu},path=>$next_path) 
 					or $_->{abs_url} eq $self->{url}) {
 			$self->{active_url}->{$_->{abs_url}}++;
@@ -226,7 +273,7 @@ sub recurse_build_active {
 			$bActive=1;
 		}
 #		$_->{abs_url}.="index.html" if $_->{abs_url}=~m!/$!;
-		print $_->{abs_url} if $DEBUG;
+		print "\turl=".$_->{abs_url} if $DEBUG;
 		print "*" if $DEBUG and $bActive;;
 		print "\n" if $DEBUG;
 		undef $key;
@@ -252,7 +299,7 @@ sub build_html {
 	my $format=format_options(($arg->{format} or $self->{format}),$level);
 	$indent+=$format->{indent};
 	my $width=0;
-	($width)=$format->{active_item_start}=~/WIDTH=(\d+)/i 
+	($width)=$format->{active_item_start}=~/WIDTH=\"?(\d+)/i 
 		if exists $format->{active_item_start};
 	$width=0 unless defined $width;
 	my $ret="";
@@ -358,6 +405,8 @@ HTML::Widgets::Menu - Builds an HTML menu
       );
 
 
+	print "<h1>$menu->title</h1>",
+	print "<h2>$menu->path</h2>",
     print $menu->html;
 
 =head1 DESCRIPTION
@@ -552,6 +601,12 @@ You can use it to build a title or path like this:
 
 	}
 	# now I have a title and path variables
+
+
+=head2 PLEASE
+
+	Please, tell me you're using it. I'll accept requests, comments,
+	suggestions, bug patches.
 
 
 =head1 AUTHOR

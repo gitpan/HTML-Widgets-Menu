@@ -18,6 +18,8 @@ print "ok 1\n";
 # (correspondingly "not ok 13") depending on the success of chunk 13
 # of the test code):
 
+use strict;
+
 my @data=(
 	'index' => 'index.html',
 	'plain html' => 'plain.html',
@@ -30,6 +32,12 @@ my @data=(
 				url=>'level1.2',
 				menu => [
 					'level 1 2 3'=>'level1.2.3'
+				],
+			},
+			'level 1.3'=> {
+				url => 'level.1.3.html',
+				menu => [
+						'level 1 3 1' => 'level1.3.1.html'
 				]
 			}
 		]
@@ -42,6 +50,7 @@ my @data=(
 		]
 	}
 );
+
 my $home="/text/menu/";
 $HTML::Widgets::Menu::DEBUG=0;
 my $menu=HTML::Widgets::Menu->new(
@@ -52,27 +61,42 @@ my $menu=HTML::Widgets::Menu->new(
 my $test=0;
 
 foreach my $link (qw( level1/level1.1 plain plain.html / level2/level2.1.html
-			level2/level2.2 index.html level1 level1/ level1/. )) {
+			level2/level2.2 level1 level1/ level1/. )) {
 	$ENV{REQUEST_URI}=$home.$link;
-	$menu->show();
+	$menu->html();
 	my @active=@{$menu->{active}};
 	my $clean_link=clean_uri($link);
-	if( $active[-1] ne $clean_link ) {
+	if(defined $active[-1] and $active[-1] ne $clean_link ) {
 		warn "html=".$menu->html,"\n";
 		warn $active[-1]," eq $clean_link ($link)\n";
+		print "not ";
+		exit;
+	}
+	if ($menu->title ne title(\@active)){
+		warn "wrong title: ".$menu->title." eq ". title(\@active);
+		print "not ";
+		exit;
+	}
+	if ($menu->path ne path(\@active)) {
+		warn "wrong path: ".$menu->path." eq ".path(@active);
 		print "not ";
 		exit;
 	}
 	print "ok ",++$test,"\n";
 }
 
-$home="/users/frankie/";
+$home="/users/frankie/blah/";
 
-@menu=(
+my @menu=(
     'my cats'=>{
-		url=>"cats.html",
+		url=>"cats",
 		menu=>[
-			panda=>"panda_main.html",
+			panda=> {
+				url => 'panda.html',
+				menu => [
+					'panda mail' => "panda_main.html",
+				]
+			}
      	],
     },
     computer=>{
@@ -92,7 +116,13 @@ $home="/users/frankie/";
 					links=>'perl_links.html',
 			    ]
 			},
-			mysql=>'mysql.html'
+			mysql=>'mysql.html',
+#			empty => {
+#				menu => [
+#					first_empty => 'first_empty.html',
+#				]
+#			},
+			undefined => undef
 		]
 	}
 );
@@ -116,24 +146,135 @@ my %format=(
 	'2'=>{indent=>10}
 );
 
+my $menu2= [
+			'Web ETSETB' => {
+				url => 'index.html',
+				menu => [
+					Objectius => 'objectius.html',
+				],
+			},
+			configuracio => {
+				url => 'configuracio',
+				menu =>  [ 
+						software => {
+							url => 'software.html',
+							menu => [
+								apache => 'apache.html',
+								squid  => 'squid.html'
+							],
+						},
+						hardware => 'hardware.html'
+				]
+			},
+			disseny => {
+				url => 'disseny.html',
+				menu => [
+					'Imatge Corporativa' => 'imatge_corporativa',
+					Estil	=> {
+						url => 'estil.html',
+						menu => [
+							'Lletres' => 'fonts.html',
+							'icones'  => 'icones.html'
+						]
+					}
+				]
+			},
+			estructura => {
+				url => 'estructura.html',
+				menu => [
+					plana_principal => {
+						 url => 'plana_principal.html',
+						menu => [
+
+							Seccions => {
+								url => 'seccions.html',
+								menu => [
+								]
+							},
+							Impactes => 'impactes.html',
+							Links => 'links.html'
+						]
+					},
+					navegacio => {
+						url => 'navegacio.html',
+						menu => [
+							menu => 'menu.html',
+							menu_inferior => 'menu_inferior.html'
+						],
+					},
+					titols => 'titols.html',
+					subtitols => 'subtitols.html',
+					links_relacionats => 'links_relacionats.hml',
+					novetats => 'novetats.html',
+					buscar   => 'buscar.html'
+				]
+	}, # d'estructura
+			programacio => {
+				url => 'programacio',
+				menu => [
+					treballar => {
+						 url => 'treballar.html',
+						menu => [
+							servidors => 'servidors.html',
+							entorn => 'entorn.html',# la primera vegada
+													# apache, mason, etc.
+							eines => 'eines.html',
+							estil => {
+								url => 'estil',
+								menu => [
+									databases => 'estil/.html',
+									html => 'estil/html.html',
+									perl => 'estil/perl.html'
+								]
+							}
+						]
+					},
+					moduls => {
+						url => 'moduls',
+						menu => [
+							'Ocupaci&oacute;ns' => 'ocupacions.html',
+							'llistes de classe' => 'llistes_classe.html',
+							'missatges' => 'missatges.html',
+							'guia docent' => 'guia_docent.html',
+							'gesti&oacute; de links' => 'gestio_links.html',
+							horaris => 'horaris.html',
+							enquestes => 'enquestes.html'
+						],
+					},
+					disseny => 'disseny.html' # CSS
+				]
+			}
+		]
+
+;
+
+for my $menu_ref((\@menu) ) {
 $menu=HTML::Widgets::Menu->new(
-	menu=>\@menu,
+	menu=>$menu_ref,
 	format => \%format,
 	home=>$home
 );
 
-foreach (qw( / /computers/ computers computers/ /computers 
-	/computers/mysql.html computers/download.zip )) {
+my @test=qw( cats cats/panda_main.html / /computers/ computers computers/ /computers 
+	/computers/mysql.html computers/download.zip 
+	);
+push @test,"";
+foreach (@test) {
 	$ENV{REQUEST_URI}=$home.$_;
+#	print "$_\t";
 	$menu->html;
 	my @active=@{$menu->{active}};
 	$_=clean_uri($_);
+#	print "$active[-1]\n";
 	if( $active[-1] ne $_) {
-		warn $active[-1]," eq ",$_,"\n";
+		warn "\"$active[-1]\" == \"$_\"\n";
 		print "not ";
+		die;
 	}
 	print "ok ",++$test,"\n";
 }
+}
+
 
 sub clean_uri {
 	$_=shift;
@@ -147,5 +288,40 @@ sub clean_uri {
 		$_="../$_";
 	}
 	s!/+!/!g;
+#	s!index.html$!!;
 	return $_;
 }
+
+sub title {
+	my $active=shift;
+	my $title="";
+	my $item;
+	foreach (@$active) {
+		unless (defined $item) {
+			$item=$_;
+			next;
+		}
+		$title.="-" if length $title;
+		$title.=$item;
+		undef $item;
+	}
+	return $title;
+}
+
+
+sub path {
+	my $active=shift;
+	my $item;
+	my $path="";
+	foreach (@$active) {
+		unless (defined $item) {
+			$item=$_;
+			next;
+		}
+		$path.='/' if length $path;
+		$path.="<A HREF=\"$_\">$item</A>";
+		undef $item;
+	}
+	return $path;
+}
+
