@@ -19,6 +19,7 @@ print "ok 1\n";
 # of the test code):
 
 my @data=(
+	'index' => 'index.html',
 	'plain html' => 'plain.html',
 	'plain dir'=>'plain',
 	'dir level 1'=>{
@@ -50,15 +51,17 @@ my $menu=HTML::Widgets::Menu->new(
 
 my $test=0;
 
-foreach (qw( level1/level1.1 plain plain.html / level2/level2.1.html
-			level2/level2.2)) {
-	$ENV{REQUEST_URI}=$home.$_;
+foreach my $link (qw( level1/level1.1 plain plain.html / level2/level2.1.html
+			level2/level2.2 index.html level1 level1/ level1/. )) {
+	$ENV{REQUEST_URI}=$home.$link;
 	$menu->show();
 	my @active=@{$menu->{active}};
-	$_=clean_uri($_);
-	if( $active[-1] ne $_) {
-		warn $active[-1]," eq ",$_,"\n";
+	my $clean_link=clean_uri($link);
+	if( $active[-1] ne $clean_link ) {
+		warn "html=".$menu->html,"\n";
+		warn $active[-1]," eq $clean_link ($link)\n";
 		print "not ";
+		exit;
 	}
 	print "ok ",++$test,"\n";
 }
@@ -133,7 +136,8 @@ foreach (qw( / /computers/ computers computers/ /computers
 }
 
 sub clean_uri {
-	shift;
+	$_=shift;
+	s!/\.$!/!;
 	$_.="/" unless /\w+:/ or /\.\w+/;
 	s!^/!!;
 	s!/+!/!g;

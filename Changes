@@ -1,14 +1,25 @@
 Revision history for Perl extension HTML::Widgets::Menu.
 
-0.01  Tue Jul 27 15:52:31 1999
-	- original version; created by h2xs 1.19
+0.03    Wed Jan 26 20:28:34 CET 2000
+    - Fixed warning when there was no width
+    - Fixed empty entries error
+    - Fixed indentation bug
+    - Added tests
+    - Fixed bug when URL ends in /.
+    - Removed BR after items when text_placeholder has length
+
 
 0.02  Sun oct 17 13:03:33 CEST 1999
-	- Rewritten from scratch.
+    - Rewritten from scratch.
     - Fixed the checking of active items so it now works even if the
       sub-menus are not inside a directory.
-	- New method html return the html rendered.
+    - New method html return the html rendered.
     - New method active returns the list of active items.
     - Method show is deprecated.
     - Improved documentation.
     - Added many tests.
+
+
+0.01  Tue Jul 27 15:52:31 1999
+	- original version; created by h2xs 1.19
+

@@ -46,12 +46,12 @@ sub format_options {
 				# max number of depth if items are not active
 						  start => '',
 							end => '',
-							font=>'<FONT FACE="arial">',
+							font=>'',
 			  active_item_start => '<B><I>',
 			   	active_item_end => '</B></I>',
 			inactive_item_start => '',
 			  inactive_item_end => '',
-			   text_placeholder => '<text>',
+			   text_placeholder => '',
 							 # example : <IMG SRC="<text>.gif" ALT="<text>">
 							 #				       ------		    ------
 					link_args=>'',
@@ -135,12 +135,14 @@ sub active {
 sub set_url {
 	my $self=shift;
 	return if defined $self->{url} and $self->{url} eq $self->{old_url};
+	croak "Undefined REQUEST_URI" unless defined $ENV{REQUEST_URI};
 	$self->{old_url}=$ENV{REQUEST_URI};
 	delete $self->{html};
 	delete $self->{active};
 	my $home=$self->home;
 	my $url=$ENV{REQUEST_URI};
 	print "url=$url ->" if $DEBUG;
+	$url=~s!/\.$!/!;
 	$url=~s!/+!/!g;
 	$url=~s/$home//; # clean the home part
 	$url=~s/\?.*$//; # and clean the args if any
@@ -148,6 +150,7 @@ sub set_url {
 				or $url=~/\w+:/
 				or $url eq "";
   	$url=~s!//+!/!g;	#strip //
+#	$url.='index.html' if $url=~m!/$!;
 	$self->{path}="";
 	foreach (1 .. $url=~ tr!/!! ) {
 		$self->{path}.="../";
@@ -202,6 +205,10 @@ sub recurse_build_active {
 				die "Unknown key $_\n" unless $_=~/^(url|menu)$/;
 			}
 		}
+		unless (exists $_->{url} and exists $_->{menu}) {
+			undef $key;
+			next;
+		}
 		$_->{url}=~s!/$!!;
 		$_->{abs_url}=$_->{url};
 		$_->{abs_url}=$path.$_->{url} unless $_->{url}=~/^\w+:/;
@@ -218,6 +225,7 @@ sub recurse_build_active {
 			$_->{active}++;
 			$bActive=1;
 		}
+#		$_->{abs_url}.="index.html" if $_->{abs_url}=~m!/$!;
 		print $_->{abs_url} if $DEBUG;
 		print "*" if $DEBUG and $bActive;;
 		print "\n" if $DEBUG;
@@ -239,18 +247,17 @@ sub build_html {
 	my $indent=0;
 	$indent= $arg->{indent} if exists $arg->{indent};
 
-
 	my $url=$self->{abs_url};
 
 	my $format=format_options(($arg->{format} or $self->{format}),$level);
 	$indent+=$format->{indent};
 	my $width=0;
-	($width)=$format->{active_item_start}=~/WIDTH=(\d+)/i;
-
+	($width)=$format->{active_item_start}=~/WIDTH=(\d+)/i 
+		if exists $format->{active_item_start};
+	$width=0 unless defined $width;
 	my $ret="";
 	my $key;
 	
-	$ret.=$format->{font};
 
 	foreach (@$rMenu) {
 		$ret.=$format->{start};
@@ -258,28 +265,38 @@ sub build_html {
         	$key=$_;
         	next;
     	}
+		unless ( exists $_->{menu} ) {
+			undef $key;
+			next;
+		}
     	my $sub_menu=$_->{menu};
 		my $bActive=$_->{active};
     	if ($bActive) {
 	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=$indent HEIGHT=3>"  
-				if ($indent);
+				if $indent;
 		    $ret.=$format->{active_item_start};
     	} else {
 	    	$ret.=$format->{inactive_item_start};
-	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=".($indent+$width)." HEIGHT=1>"  if $indent+$width;
+	    	$ret.="<IMG SRC=\"/img/point.gif\" WIDTH=".($indent+$width)." HEIGHT=1>"  if $indent+$width;
     	}
 		if (length $_->{abs_url}) {
 			my $link_w="<A HREF=\"".$_->{abs_url}."\" $format->{link_args}>";
 			$link_w=~s/\<text\>/$key/g;
 			$ret.=$link_w;
 		}
-		if (defined $format->{text_placeholder}) {
+		$ret.=$format->{font} 
+			if exists $format->{font} and length $format->{font};
+
+		if (defined $format->{text_placeholder} 
+					and length $format->{text_placeholder}) {
 			my $wrap=$format->{text_placeholder};
 			$wrap=~s/\<text\>/$key/g;
     		$ret.=$wrap;
 		} else {
 			$ret.=$key;
 		}
+		$ret.="</FONT>" if exists $format->{font} and length $format->{font};
+
     	$ret.="</A>";
 
     	if ($bActive and length $_->{url}) {
@@ -287,7 +304,9 @@ sub build_html {
     	} else {
 	    	$ret.=$format->{inactive_item_end};
     	}
-    	$ret.="<BR>\n";
+    	$ret.="<BR>" unless defined $format->{text_placeholder}
+						and length $format->{text_placeholder};
+		$ret.="\n";
     	if ($level<$format->{max_depth} or $bActive) {
 	  		my $subMenu	=$self->build_html(
 					menu=>$sub_menu,
@@ -300,7 +319,6 @@ sub build_html {
     	undef $key;
     	$ret.=$format->{end};
 	}
-	$ret.="</FONT>";
 	return $ret;
 }
 
@@ -339,9 +357,8 @@ HTML::Widgets::Menu - Builds an HTML menu
          ]
       );
 
-      my ($menu)=$main->show();
 
-      <% $menu %>
+    print $menu->html;
 
 =head1 DESCRIPTION
 
@@ -352,7 +369,7 @@ It's smart enough it will highlight the current active items.
 
 You can see an example of this here: http://www.etsetb.upc.es/~frankie
 
-This software is in a very early stage. It works fine for me and
+This software is more mature that latest version. It works fine for me and
 is used in production sites. The very first version was almost unusable
 if you didn't had very strict rules for creating the menu, now it's
 much improved and useful. Tell me if you like it or not.
@@ -380,12 +397,12 @@ For example, a simple menu could be:
           "my links" =>"links.html"
     );
 
-You can add levels of depth to the menu:
+You can add depth to the menu:
 
 
     my @menu=(  
-        homepage => '.',
-        "my links=>{
+        homepage   => '.',
+        "my links" => {
                   url=>"links/",
                   menu=>[
                         perl  =>"perl_link.html",
@@ -395,7 +412,7 @@ You can add levels of depth to the menu:
      );
 
 For every level you add instead of the url you must supply a
-reference to a hash with the url and the menu.
+reference to a hash with the url and the submenu.
 Now you can get this menu printed in html easily and get the
 list of active items.
 
@@ -437,7 +454,7 @@ Options available (with defaults):
   link_args=>'',
            # put javascript options here or other args
            # for the <A HREF tag
-  indent => 1,
+  indent => 8,
 			# pixels for the indentation
 
 Example:
@@ -473,32 +490,68 @@ must call the html method. It will build it using home,
 format and menu. The final links will always be related
 to the current URL. 
 
+
+The pixel indentation is done using the url /img/point.gif.
+
+If you define an active format with an image like this:
+    active_item_start=> ' <IMG SRC="arrow.gif" WIDTH="10">'
+
+this WIDTH is added to the indentation so it looks pretty cool
+in the screen:
+
+
+       not active
+       another url
+    => this is the active
+       another one
+
+			
+The other items have been indented the width of the image, in addition
+to the indent tag in the format.
+
+
+The activation of the items work automagically reading the environment 
+variable provided by the web server: $ENV{REQUEST_URI}
+
+=head2 Active Items
+
 The active method returns a usefull thing: the active
 items of the menu. In the former example if the user is in
 the url:  "movies.html" it will return a reference to a list
 like this:
 	"my_links"=>"links"
 	"movies I like "=>"links/movies.html"
-so you can know the path of the currem item. Now you can add the
-keys of it to the title for example.
 
-The pixel indentation is done using the url /img/point.gif.
+What can I do with the active items ?
 
-If you define an active format with an image like this:
-	active_item_start=> ' <IMG SRC="arrow.gif" WIDTH="10">'
-this WIDTH is added to the indentation so it looks pretty cool
-in the screen:
-	   not active
-	   another url
-	=> this is the active
-	   another
-			
-The others have been indented the width of the image, in addition
-to the indent tag in the format.
+once the menu is built you can retrieve its active items this way:
+
+	$menu->active;
+
+This method returns an array with the items and links this way:
+
+	item1 , link1 , item2, link2
+
+You can use it to build a title or path like this: 
+
+	print $menu->html; # that builds the menu
 
 
-The activation of the items work reading the environment variable
-provided by the web server: $ENV{REQUEST_URI}
+	my $title="Main Title";
+	my $path="";
+	my $item;
+	foreach (@{$menu->active}) {
+		$item=$_ and next unless defined $item;
+
+		$title.=" - $item";
+
+		$path.="/" if length $path;
+		$path.="<A HREF=\"$_\">$item</A>";
+
+		undef $item;
+
+	}
+	# now I have a title and path variables
 
 
 =head1 AUTHOR
