@@ -1,7 +1,8 @@
 package HTML::Widgets::Menu;
 
+
 use strict;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $DEBUG);
 
 require Exporter;
 require AutoLoader;
@@ -16,12 +17,295 @@ require AutoLoader;
 	new menu format html show
 	
 );
-$VERSION = '0.01';
+$VERSION = '0.02';
+
+$DEBUG=0;
 
 
 # Preloaded methods go here.
 
 # Autoload methods go after =cut, and are processed by the autosplit program.
+use DBI;
+use CGI;
+use CGI::Carp qw(fatalsToBrowser);
+
+sub parse_arg {
+  my $arg=shift @_;
+  warn $#$arg,(join "-",@$arg) unless $#$arg%2;
+  my %arg=@$arg;
+  foreach (@_) {
+	die "$_ not present" unless exists $arg{$_} and length $arg{$_};
+  }
+  return \%arg;
+}
+
+sub format_options {
+	my ($format,$level)=@_;
+	my %format_option=(
+					  max_depth => 1,
+				# max number of depth if items are not active
+						  start => '',
+							end => '',
+							font=>'<FONT FACE="arial">',
+			  active_item_start => '<B><I>',
+			   	active_item_end => '</B></I>',
+			inactive_item_start => '',
+			  inactive_item_end => '',
+			   text_placeholder => '<text>',
+							 # example : <IMG SRC="<text>.gif" ALT="<text>">
+							 #				       ------		    ------
+					link_args=>'',
+							# put javascript options here or other args
+							# for the <A HREF tag
+					     indent => 0,
+	);
+	my $default_format=$format->{default};
+	foreach (keys %$default_format) {
+		warn "$_ is not a format option anymore\n" 
+			unless exists $format_option{$_};
+		$format_option{$_}=$default_format->{$_};
+	}
+	my $current_level_format=$format->{$level};
+	foreach (keys %$current_level_format) {
+		warn "$_ is not a format option anymore\n" 
+			unless exists $format_option{$_};
+		$format_option{$_}=$current_level_format->{$_};
+	}
+	return \%format_option;
+}
+
+sub new {
+	my $proto = shift;
+	my $class = ref($proto) || $proto;
+	my $args=parse_arg(\@_);
+	my $self={
+		menu=>($args->{menu} or []),
+		format=>($args->{format} or {}),
+		home=>($args->{home} or '')
+	}; 
+	$self->{home}.="/" unless $self->{home}=~m!/$|\.html$!;
+#	print "home=$self->{home}\n";
+	bless ($self,$class);
+	return $self;
+}
+
+sub menu {
+	my $self=shift;
+	my $menu=shift;
+	return $self->{menu} unless defined $menu;
+	$self->{menu}=$menu;
+}
+
+sub format {
+	my ($self,$format)=@_;
+	return $self->{format} unless defined $format;
+	$self->{format}=$format;
+}
+
+sub home {
+	my ($self,$home)=@_;
+	return $self->{home} unless defined $home;
+	$self->{home}=$home;
+}
+
+sub show {
+	my $self=shift;
+	my %arg=@_;
+	$self->set_url();
+	$self->build_active(menu=>$self->{menu});
+	$self->{html}=$self->build_html(@_);
+	return ($self->{html},$self->{active});
+}
+
+sub html {
+	my $self=shift;
+	$self->set_url();
+	$self->build_active unless defined $self->{active};
+	my $html=($self->{html} or $self->build_html);
+	$self->{html}=$html;
+	return $self->{html};
+}
+
+sub active {
+	my $self=shift;
+	$self->build_active unless defined $self->{active};
+	return $self->{active};
+}
+
+sub set_url {
+	my $self=shift;
+	return if defined $self->{url} and $self->{url} eq $self->{old_url};
+	$self->{old_url}=$ENV{REQUEST_URI};
+	delete $self->{html};
+	delete $self->{active};
+	my $home=$self->home;
+	my $url=$ENV{REQUEST_URI};
+	print "url=$url ->" if $DEBUG;
+	$url=~s!/+!/!g;
+	$url=~s/$home//; # clean the home part
+	$url=~s/\?.*$//; # and clean the args if any
+	$url.="/" unless $url=~m!(\.\w+|/)$!
+				or $url=~/\w+:/
+				or $url eq "";
+  	$url=~s!//+!/!g;	#strip //
+	$self->{path}="";
+	foreach (1 .. $url=~ tr!/!! ) {
+		$self->{path}.="../";
+	}
+	$self->{url}=$self->{path}.$url;
+	print $self->{url},"\n" if $DEBUG;
+}
+
+sub build_active {
+	my $self=shift;
+	return if defined $self->{active};
+	$self->recurse_build_active();
+	my $active=$self->{active};
+	my @rev;
+	my $key;
+	foreach (@$active) {
+		unless (defined $key) {
+			$key=$_;
+			next;
+		}
+		push @rev,($_,$key);
+		undef $key;
+	}
+	my @rev2=reverse @rev;
+	$self->{active}=\@rev2;
+}
+	
+sub recurse_build_active {
+	# returns true if one of the entries is active
+	my $self=shift;
+	my %arg=@_;
+	my $menu=($arg{menu}
+				or $self->{menu}
+				or []);
+	my $path=($arg{path} or $self->{path} or "");
+	my $key;
+	my $bActive=0;
+	foreach (@$menu) {
+		unless (defined $key ) {
+			$key=$_;
+			next;
+		}
+		unless (ref $_) {
+			$_={
+				url=>$_,
+				menu=>[]
+			};
+		} else {
+			delete $_->{active};
+			delete $_->{abs_url};
+			foreach (keys %$_) {
+				die "Unknown key $_\n" unless $_=~/^(url|menu)$/;
+			}
+		}
+		$_->{url}=~s!/$!!;
+		$_->{abs_url}=$_->{url};
+		$_->{abs_url}=$path.$_->{url} unless $_->{url}=~/^\w+:/;
+		$_->{abs_url}.="/" unless $_->{url}=~m!(\.\w+|/)$!
+						or $_->{url}=~/^\w+:/;
+		my $next_path="";
+		$next_path=$_->{abs_url} if $_->{abs_url}=~m!/$!;
+		if ($self->recurse_build_active(menu=>$_->{menu},path=>$next_path) 
+					or $_->{abs_url} eq $self->{url}) {
+			$self->{active_url}->{$_->{abs_url}}++;
+			my $active=$self->{active};
+			push @$active,($key,$_->{abs_url});
+			$self->{active}=$active;
+			$_->{active}++;
+			$bActive=1;
+		}
+		print $_->{abs_url} if $DEBUG;
+		print "*" if $DEBUG and $bActive;;
+		print "\n" if $DEBUG;
+		undef $key;
+	}
+	return $bActive;
+}
+
+sub build_html {
+	my $self=shift;
+	my $arg=parse_arg(\@_);
+	my $rMenu=($arg->{menu} 
+				or $self->{menu} 
+				or []);
+	
+	my $level=0;
+	$level=$arg->{level} if exists $arg->{level};
+
+	my $indent=0;
+	$indent= $arg->{indent} if exists $arg->{indent};
+
+
+	my $url=$self->{abs_url};
+
+	my $format=format_options(($arg->{format} or $self->{format}),$level);
+	$indent+=$format->{indent};
+	my $width=0;
+	($width)=$format->{active_item_start}=~/WIDTH=(\d+)/i;
+
+	my $ret="";
+	my $key;
+	
+	$ret.=$format->{font};
+
+	foreach (@$rMenu) {
+		$ret.=$format->{start};
+    	if (!defined $key) {
+        	$key=$_;
+        	next;
+    	}
+    	my $sub_menu=$_->{menu};
+		my $bActive=$_->{active};
+    	if ($bActive) {
+	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=$indent HEIGHT=3>"  
+				if ($indent);
+		    $ret.=$format->{active_item_start};
+    	} else {
+	    	$ret.=$format->{inactive_item_start};
+	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=".($indent+$width)." HEIGHT=1>"  if $indent+$width;
+    	}
+		if (length $_->{abs_url}) {
+			my $link_w="<A HREF=\"".$_->{abs_url}."\" $format->{link_args}>";
+			$link_w=~s/\<text\>/$key/g;
+			$ret.=$link_w;
+		}
+		if (defined $format->{text_placeholder}) {
+			my $wrap=$format->{text_placeholder};
+			$wrap=~s/\<text\>/$key/g;
+    		$ret.=$wrap;
+		} else {
+			$ret.=$key;
+		}
+    	$ret.="</A>";
+
+    	if ($bActive and length $_->{url}) {
+	    	$ret.=$format->{active_item_end};
+    	} else {
+	    	$ret.=$format->{inactive_item_end};
+    	}
+    	$ret.="<BR>\n";
+    	if ($level<$format->{max_depth} or $bActive) {
+	  		my $subMenu	=$self->build_html(
+					menu=>$sub_menu,
+					format=>$arg->{format},
+					level=>$level+1,
+					indent=>$indent+$width,
+			);
+     		$ret.=$subMenu if defined $subMenu;
+    	}
+    	undef $key;
+    	$ret.=$format->{end};
+	}
+	$ret.="</FONT>";
+	return $ret;
+}
+
+1;
+__END__
 
 =head1 NAME
 
@@ -62,14 +346,19 @@ HTML::Widgets::Menu - Builds an HTML menu
 =head1 DESCRIPTION
 
 This module will help you build a menu for your HTML site.
-You can use with CGI or any mod_perl module. I use it from Mason.
+You can use with CGI or any mod_perl module. I use it from HTML::Mason.
 Every time you request to show a menu it will return the HTML tags.
 It's smart enough it will highlight the current active items.
 
+You can see an example of this here: http://www.etsetb.upc.es/~frankie
+
 This software is in a very early stage. It works fine for me and
-is used in production sites.
+is used in production sites. The very first version was almost unusable
+if you didn't had very strict rules for creating the menu, now it's
+much improved and useful. Tell me if you like it or not.
+
 You can send me patches, bugs or suggestions.
-I'm not likely to answer your questions.
+
 This software is provided as is and you're using it at your own risk.
 You agree to use it with the same license of perl itself.
 
@@ -107,14 +396,15 @@ You can add levels of depth to the menu:
 
 For every level you add instead of the url you must supply a
 reference to a hash with the url and the menu.
-Now you can get this menu printed without any format at all.
+Now you can get this menu printed in html easily and get the
+list of active items.
 
-my $main=HTML::Widgets::Menu(menu=>\@menu,home=>"/users/frankie/");
+my $main=HTML::Widgets::Menu->new(menu=>\@menu,home=>"/users/frankie/");
  
-my ($menu)=$main->show();
+print $main->html(); # this renders the html
+my @active_items= @{$main->active}; # list of active items
 
 
-Later insert $menu in your page. With Mason I'd do:  <% $menu %>
 
 If the url of the item is only the name of a directory (the final /
 is not necessary), the path is added to the submenu. For the example
@@ -133,7 +423,7 @@ starting with 0.
 
 Options available (with defaults):
   max_depth => 1,
-        # max number of depth if items are not active
+        # max number of depth shown if items are not active
   start => '', #html to put at the start of the level
   end => '', #html to add at the end of the level
   font=>'<FONT>',
@@ -174,16 +464,16 @@ my %format={
 
 Try it like this:
  
-my ($main)=HTML::Widgets::Menu->new(format=>\%format
+my $main=HTML::Widgets::Menu->new(format=>\%format
                                     menu=>\@menu,
                                     home=>"/users/frankie");
 
 When you want to request the html that shows the menu you
-must call the show funcion. It will build it using home,
+must call the html method. It will build it using home,
 format and menu. The final links will always be related
 to the current URL. 
 
-The show function also returns a usefull thing: the active
+The active method returns a usefull thing: the active
 items of the menu. In the former example if the user is in
 the url:  "movies.html" it will return a reference to a list
 like this:
@@ -192,8 +482,23 @@ like this:
 so you can know the path of the currem item. Now you can add the
 keys of it to the title for example.
 
-my ($menu,$active)=$main->show();
+The pixel indentation is done using the url /img/point.gif.
 
+If you define an active format with an image like this:
+	active_item_start=> ' <IMG SRC="arrow.gif" WIDTH="10">'
+this WIDTH is added to the indentation so it looks pretty cool
+in the screen:
+	   not active
+	   another url
+	=> this is the active
+	   another
+			
+The others have been indented the width of the image, in addition
+to the indent tag in the format.
+
+
+The activation of the items work reading the environment variable
+provided by the web server: $ENV{REQUEST_URI}
 
 
 =head1 AUTHOR
@@ -207,200 +512,4 @@ mod_perl
 
 =cut
 
-use DBI;
-use CGI;
-use CGI::Carp qw(fatalsToBrowser);
 
-sub parse_arg {
-  my $arg=shift @_;
-  warn $#$arg,(join "-",@$arg) unless $#$arg%2;
-  my %arg=@$arg;
-  foreach (@_) {
-	die "$_ not present" unless exists $arg{$_} and length $arg{$_};
-  }
-  return \%arg;
-}
-
-sub format_options {
-	my ($format,$level)=@_;
-	my %format_option=(
-					  max_depth => 1,
-				# max number of depth if items are not active
-						  start => '',
-							end => '',
-							font=>'<FONT>',
-			  active_item_start => '<B><I>',
-			   	active_item_end => '</B></I>',
-			inactive_item_start => '',
-			  inactive_item_end => '',
-			   text_placeholder => '<text>',
-							 # example : <IMG SRC="<text>.gif" ALT="<text>">
-							 #				       ------		    ------
-					link_args=>'',
-							# put javascript options here or other args
-							# for the <A HREF tag
-					     indent => 1,
-	);
-	my $default_format=$format->{default};
-	foreach (keys %$default_format) {
-		warn "$_ is not a format option anymore\n" 
-			unless exists $format_option{$_};
-		$format_option{$_}=$default_format->{$_};
-	}
-	my $current_level_format=$format->{$level};
-	foreach (keys %$current_level_format) {
-		warn "$_ is not a format option anymore\n" 
-			unless exists $format_option{$_};
-		$format_option{$_}=$current_level_format->{$_};
-	}
-	return \%format_option;
-}
-
-sub new {
-	my $proto = shift;
-	my $class = ref($proto) || $proto;
-	my $args=parse_arg(\@_);
-	my $self={
-		menu=>($args->{menu} or []),
-		format=>($args->{format} or {}),
-		home=>($args->{home} or '')
-	};
-	bless ($self,$class);
-	return $self;
-}
-
-sub menu {
-	my $self=shift;
-	my $menu=shift;
-	return $self->{menu} unless defined $menu;
-	$self->{menu}=$menu;
-}
-
-sub format {
-	my ($self,$format)=@_;
-	return $self->{format} unless defined $format;
-	$self->{format}=$format;
-}
-
-sub home {
-	my ($self,$home)=@_;
-	return $self->{home} unless defined $home;
-	$self->{home}=$home;
-}
-
-sub show {
-	my $self=shift;
-	my $arg=parse_arg(\@_);
-	my $rMenu=($arg->{menu} 
-				or $self->{menu} 
-				or []);
-	
-	my $level=0;
-	$level=$arg->{level} if exists $arg->{level};
-
-	my $indent=0;
-	$indent= $arg->{indent} if exists $arg->{indent};
-
-	my $home=($arg->{home} or $self->{home});
-	my $url=$ENV{REQUEST_URI};
-	$url=~s/$home//; # clean the home part
-	$url=~s/\?.*$//; # and clean the args if any
-  	$url.='/' unless $url=~m[(\.html$)|^$|/$]; 
-								# add / if it's a directory
-  	$url=~s!/+!/!g;	#strip //
-  	$url="." unless length $url;
- 	my $path="";
-	$path=$arg->{path} if exists $arg->{path};
-
-	my $format=format_options(($arg->{format} or $self->{format}),$level);
-	$indent+=$format->{indent};
-	my ($width)=($format->{active_item_start}=~/WIDTH=(\d+)/i or 0);
-
-	my $ret="";
-	my @active=();
-	my $key;
-	
-	$ret.=$format->{font};
-
-	foreach (@$rMenu) {
-		$ret.=$format->{start};
-    	if (!defined $key) {
-        	$key=$_;
-        	next;
-    	}
-		unless (ref $_) {
-			$_={
-				url=>$_,
-				menu=>[]
-			};
-		}
-		$_->{url}.="/" unless $_->{url}=~m!(\.html$)!;
-    	my $sub_menu=$_->{menu};
-    	my $bActive=0;
-    	$bActive=($url=~m!^$path$_->{url}!);
-    	if ($bActive) {
-	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=$indent HEIGHT=3>"  
-				if ($indent);
-		    $ret.=$format->{active_item_start};
-	    	$active[++$#active]=$key;
-    	} else {
-	    	$ret.=$format->{inactive_item_star};
-	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=".($indent+$width)." HEIGHT=1>" ;
-    	}
-		my $link="";
-    	my $dir_level=($url=~tr!/!!);
-			if (length $_->{url}) {
-    		if ($dir_level) {
-    			for (my $cont=1;$cont<=$dir_level;$cont++) {
-					$link.="../";
-    			}
-    		}
-			if ($_->{url}=~/(^http)|(^ftp)/) {
-				$link.=$_->{url};
-			} else {
-    			$link.="$path$_->{url}";
-			}
-			my $link_w="<A HREF=\"$link\" $format->{link_args}>";
-			$link_w=~s/\<text\>/$key/g;
-			$ret.=$link_w;
-		}
-		if (defined $format->{text_placeholder}) {
-			my $wrap=$format->{text_placeholder};
-			$wrap=~s/\<text\>/$key/g;
-    		$ret.=$wrap;
-		} else {
-			$ret.=$key;
-		}
-    	$ret.="</A>";
-
-    	if ($bActive and length $link) {
-	    	$active[++$#active]=$link;
-	    	$ret.=$format->{active_item_end};
-    	} else {
-	    	$ret.=$format->{inactive_item_end};
-    	}
-    	$ret.="<BR>\n";
-    	if ($level<$format->{max_depth} or $bActive) {
-			my $path_son=${path};
-			$path_son.=$_->{url} unless $_->{url}=~/html$/;
-    		my ($subMenu,$rSubActive)
-	  			=$self->show(
-					menu=>$sub_menu,
-					format=>$arg->{format},
-					level=>$level+1,
-					indent=>$indent+$width,
-					home=>$home,
-					path=>$path_son
-			);
-     		$ret.=$subMenu if defined $subMenu;
-    		push @active,@$rSubActive if defined ($rSubActive);
-    	}
-    	undef $key;
-    	$ret.=$format->{end};
-	}
-	$ret.="</FONT>";
-	return ($ret,\@active);
-}
-
-1;
-__END__

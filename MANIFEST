@@ -2,4 +2,4 @@ Changes
 MANIFEST
 Makefile.PL
 Menu.pm
-README
+test.pl
