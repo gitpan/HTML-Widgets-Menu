@@ -16,3 +16,11 @@ Revision history for Perl extension HTML::Widgets::Menu.
 0.09  Fri May 26 16:26:38 CEST 2000
 	- Fixed minor bugs
 	- You can ask for path and title before rendering the menu
+
+0.10 Thu Sep 28 13:47:51 CEST 2000
+	This is a very stable release widely used !! 
+	- Create the menu from a data base.
+	- Many bugfixes:
+	- Fixed width of images for indentation.
+	- Fixed path and title methods, sometimes didn't work
+	- Fixed three level submenus

@@ -42,6 +42,7 @@ my @data=(
 			}
 		]
 	},
+	empty => '',
 	'dir level 2'=>{
 		url=>'level2',
 		menu => [
@@ -252,7 +253,11 @@ for my $menu_ref((\@menu) ) {
 $menu=HTML::Widgets::Menu->new(
 	menu=>$menu_ref,
 	format => \%format,
-	home=>$home
+	home=>$home,
+	auth => sub {
+	#	print shift;
+		return 1;
+	}
 );
 
 my @test=qw( cats cats/panda_main.html / /computers/ computers computers/ /computers 
@@ -274,6 +279,10 @@ foreach (@test) {
 	print "ok ",++$test,"\n";
 }
 }
+
+
+#test_dbi();
+
 
 
 sub clean_uri {
@@ -325,3 +334,46 @@ sub path {
 	return $path;
 }
 
+sub test_dbi {
+
+	print "Testing DB: ";
+
+	my $dbh=DBI->connect("DBI:mysql:test") or die $DBI::errstr;
+	$dbh->do("DROP TABLE test_menu") or warn $DBI::errstr;
+	$dbh->do("
+		CREATE TABLE test_menu (
+		       id 	int auto_increment primary key,
+		id_parent 	int not null,
+			 item   char(20),
+		      url   char(80)
+		)
+	") or die $DBI::errstr;
+	my $menu_data=<<EOT;
+1:0:a:a.html
+2:0:b:b
+3:1:b1:b1.html
+4:1:b2:b2
+5:4:b21:b21.html
+6:4:b22:b22.html
+EOT
+
+	foreach my $line (split/\n/,$menu_data) {
+		$line =~ s/:/','/g;
+		$dbh->do(" INSERT INTO test_menu values('$line')") or die $DBI::errstr;
+	}
+
+	my $menu=HTML::Widgets::Menu->new_dbi (
+		  dbh => $dbh,
+		table => 'test_menu',
+		field_id => 'id',
+		field_id_parent => 'id_parent',
+		field_item => 'item',
+		field_url => 'url'
+		
+	);
+
+	$dbh->disconnect;
+
+	print "ok.\n";
+
+}

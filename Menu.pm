@@ -58,6 +58,7 @@ sub format_options {
 							# put javascript options here or other args
 							# for the <A HREF tag
 					     indent => 0,
+					    auto_br => 1
 	);
 	my $default_format=$format->{default};
 	foreach (keys %$default_format) {
@@ -86,7 +87,16 @@ sub new {
 	$self->{home}.="/" unless $self->{home}=~m!/$|\.html$!;
 #	print "home=$self->{home}\n";
 	bless ($self,$class);
+	$self->{auth}=$args->{allowed}  if exists $args->{allowed};
 	return $self;
+}
+
+sub call_auth {
+	my $self=shift;
+	return 1 unless exists $self->{auth};
+	my $url=shift;
+	$url=~s!^(\.\./)+!!g;
+	return &{$self->{auth}}( $self->{home}.$url );
 }
 
 sub menu {
@@ -263,11 +273,17 @@ sub recurse_build_active {
 		$next_path.="/" if $_->{abs_url}=~m!/$!;
 
 		$next_path=~s#//+#/#g;
+
+		unless ( $self->call_auth($_->{abs_url}) ){
+			undef $key;
+			next;
+		}
+
 		if ($self->recurse_build_active(menu=>$_->{menu},path=>$next_path) 
 					or $_->{abs_url} eq $self->{url}) {
 			$self->{active_url}->{$_->{abs_url}}++;
 			my $active=$self->{active};
-			push @$active,($key,$_->{abs_url});
+			push @$active,($key,$_->{abs_url}) ;
 			$self->{active}=$active;
 			$_->{active}++;
 			$bActive=1;
@@ -319,9 +335,9 @@ sub build_html {
     	my $sub_menu=$_->{menu};
 		my $bActive=$_->{active};
     	if ($bActive) {
+			$ret.=$format->{active_item_start};
 	    	$ret.="<IMG SRC='/img/point.gif' WIDTH=$indent HEIGHT=3>"  
 				if $indent;
-		    $ret.=$format->{active_item_start};
     	} else {
 	    	$ret.=$format->{inactive_item_start};
 	    	$ret.="<IMG SRC=\"/img/point.gif\" WIDTH=".($indent+$width)." HEIGHT=1>"  if $indent+$width;
@@ -351,8 +367,9 @@ sub build_html {
     	} else {
 	    	$ret.=$format->{inactive_item_end};
     	}
-    	$ret.="<BR>" unless defined $format->{text_placeholder}
-						and length $format->{text_placeholder};
+    	$ret.="<BR>" unless (defined $format->{text_placeholder}
+								&& length $format->{text_placeholder})
+						|| !$format->{auto_br};
 		$ret.="\n";
     	if ($level<$format->{max_depth} or $bActive) {
 	  		my $subMenu	=$self->build_html(
@@ -401,7 +418,16 @@ HTML::Widgets::Menu - Builds an HTML menu
             },
             item2=>"url for item 2"
             # more items
-         ]
+         ],
+		
+         # this is experimental
+
+         allowed => sub {
+             my ($url)=shift;
+             my $user=$r->connection->user();
+			return 1 unless defined $user;
+			return ($user eq "frankie"  && $url =~/^intranet/);
+         }
       );
 
 
@@ -506,6 +532,8 @@ Options available (with defaults):
   indent => 8,
 			# pixels for the indentation
 
+  auto_br => 1, # Adds a <br> at the end of every line [default 1]
+
 Example:
 my %format={
    default=>{
@@ -601,6 +629,23 @@ You can use it to build a title or path like this:
 
 	}
 	# now I have a title and path variables
+
+
+=head2 Experimental Features
+
+=over
+
+=item *
+
+see test.pl file for a cool feature that lets you read menu
+data from a database !
+
+=item *
+
+There is another new feature that lets you do authorization. So you
+can have some users access some menus and other don't.
+
+=back
 
 
 =head2 PLEASE
