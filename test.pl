@@ -28,10 +28,11 @@ my @data=(
 		url=>'level1',
 		menu=>[
 			'level 1.1'=>'level1.1',
+			'form' => 'form.html?foo=bar',
 			'level 1.2'=>{
 				url=>'level1.2',
 				menu => [
-					'level 1 2 3'=>'level1.2.3'
+					'level 1 2 3'=>'level1.2.3',
 				],
 			},
 			'level 1.3'=> {
@@ -61,7 +62,7 @@ my $menu=HTML::Widgets::Menu->new(
 
 my $test=0;
 
-foreach my $link (qw( level1/level1.1 plain plain.html / level2/level2.1.html
+foreach my $link (qw( form.html?foo=bar level1/level1.1 plain plain.html / level2/level2.1.html
 			level2/level2.2 level1 level1/ level1/. )) {
 	$ENV{REQUEST_URI}=$home.$link;
 	$menu->html();
@@ -152,6 +153,7 @@ my $menu2= [
 				url => 'index.html',
 				menu => [
 					Objectius => 'objectius.html',
+					test_form => 'test.html?foo=bar'
 				],
 			},
 			configuracio => {
@@ -338,7 +340,8 @@ sub test_dbi {
 
 	print "Testing DB: ";
 
-	my $dbh=DBI->connect("DBI:mysql:test") or die $DBI::errstr;
+	my $dbh=DBI->connect("DBI:mysql:test") 
+		or die "$DBI::errstr\n";
 	$dbh->do("DROP TABLE test_menu") or warn $DBI::errstr;
 	$dbh->do("
 		CREATE TABLE test_menu (

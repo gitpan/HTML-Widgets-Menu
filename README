@@ -1,330 +1,314 @@
+NAME
+    HTML::Widgets::Menu - Builds an HTML menu
 
+SYNOPSIS
+      use HTML::Widgets::Menu;
+      my $main=HTML::Widgets::Menu->new(
+         home       => "/users/frankie/",
 
-
-Menu(3)        User Contributed Perl Documentation        Menu(3)
-
-
-NNNNAAAAMMMMEEEE
-       HTML::Widgets::Menu - Builds an HTML menu
-
-SSSSYYYYNNNNOOOOPPPPSSSSIIIISSSS
-         use HTML::Widgets::Menu;
-         my $main=HTML::Widgets::Menu->new(
-                home   => "/users/frankie/",
-
-                format => {
-                   default=>{
-                        # default format options #
-                   },
-                   0=>{
-                      #level 0 format  options#
-                   }
-                   # more levels
+         format     => {
+            default=>{
+                 # default format options #
                 },
-
-                menu=> [
-                   item1=>{
-                       url=>"url for item 1",
-                       menu=>[
-                             item1_1=>'url for item 1_1'
-                       ]
-                   },
-                   item2=>"url for item 2"
-                   # more items
-                ],
-
-                # this is experimental
-
-                allowed => sub {
-                    my ($url)=shift;
-                    my $user=$r->connection->user();
-                               return 1 unless defined $user;
-                               return ($user eq "frankie"  && $url =~/^intranet/);
+                0=>{
+                   #level 0 format  options#
                 }
-             );
+                # more levels
+             },
+
+             menu=> [
+                item1=>{
+                    url=>"url for item 1",
+                    menu=>[
+                          item1_1=>'url for item 1_1'
+                    ]
+                },
+                item2=>"url for item 2"
+                # more items
+             ],
+
+             # this is experimental.
+
+             allowed => sub {
+                my ($url)=shift;
+                my $user=$ENV{REMOTE_USER};
+                return 1 unless defined $user;
+                return ($user eq "frankie"  && $url =~/^intranet/);
+             }
+          );
+
+        print "<title>$menu->title</title>",
+        print "<h2>$menu->path</h2>",
+        print $menu->html;
+
+DESCRIPTION
+    This module will help you build a menu for your HTML site. You can use
+    with CGI or any mod_perl module. I use it from HTML::Mason. Every time
+    you request to show a menu it will return the HTML tags. It's smart
+    enough it will highlight the current active items.
+
+    You can see an example of this here: http://www.etsetb.upc.es/~frankie
+
+    This software is more mature that latest version. It works fine for me
+    and is used in production sites. The very first version was almost
+    unusable if you didn't had very strict rules for creating the menu, now
+    it's much improved and useful. Tell me if you like it or not.
+
+    You can send me patches, bugs or suggestions.
+
+    This software is provided as is and you're using it at your own risk.
+    You agree to use it with the same license of perl itself.
+
+    Drawing a menu is a matter of : the items of the menu the format you
+    want it to have
+
+    You also must supply the home directory for all the web you want to add
+    this menu.
+
+  ITEMS
+
+    The items is a list.
+
+    For example, a simple menu could be:
+
+        my @menu=(
+              homepage   =>'.',
+              "my links" =>"links.html"
+        );
+
+    You can add depth to the menu:
+
+        my @menu=(  
+            homepage   => '.',
+            "my links" => {
+                      url=>"links/",
+                      menu=>[
+                            perl  =>"perl_link.html",
+                            "movies I like"=>'movies.html'
+                      ],
+             about=>"about.html"
+         );
+
+    For every level you add instead of the url you must supply a reference
+    to a hash with the url and the submenu. Now you can get this menu
+    printed in html easily and get the list of active items.
+
+      my $main=HTML::Widgets::Menu->new(menu=>\@menu,home=>"/users/frankie/");
+ 
+      print $main->html(); # this renders the html
+      my @active_items= @{$main->active}; # list of active items
+
+    If the url of the item is only the name of a directory (the final / is
+    not necessary), the path is added to the submenu. For the example above
+    you must write the files: index.html links/index.html
+    links/perl_link.thml links/movies.html about.html
+
+    The format is the way you tell how to show the items of the menu It's a
+    hash where you define the options. There should be a default entry and
+    numbered entries for every level, starting with 0.
+
+    Options available (with defaults): max_depth => 1, # max number of depth
+    shown if items are not active start => '', #html to put at the start of
+    the level end => '', #html to add at the end of the level
+    font=>'<FONT>', active_item_start => '<B><I>', # '<img
+    src="/icons/<url>_active.gif">' active_item_end => '</B></I>', # '<img
+    src="/icons/<url>_inactive.gif">' inactive_item_start => '',
+    inactive_item_end => '', text_placeholder => '<text>', # example : <IMG
+    SRC="<text>.gif" ALT="<text>"> # ------ ------ active_text_placeholder
+    => '<text>' # same use as text_placeholder but for active items
+    link_args=>'', # put javascript options here or other args # for the <A
+    HREF tag indent => 8, # pixels for the indentation
 
-               print "<h1>$menu->title</h1>",
-               print "<h2>$menu->path</h2>",
-           print $menu->html;
+      auto_br => 1, # Adds a <br> at the end of every line [default 1]
 
+    Example:
 
-DDDDEEEESSSSCCCCRRRRIIIIPPPPTTTTIIIIOOOONNNN
-       This module will help you build a menu for your HTML site.
-       You can use with CGI or any mod_perl module. I use it from
-       HTML::Mason.  Every time you request to show a menu it
-       will return the HTML tags.  It's smart enough it will
-       highlight the current active items.
+      my %format={
+       default=>{
+            max_depth=>2,
+            font=>"<FONT SIZE=2>\n",
+            active_item_start=>"<IMG 
+                SRC=\"/users/frankie/img/blue_arrow.gif\" 
+                BORDER=0 WIDTH=6><B><I><FONT COLOR=\"BLUE\">",
+            active_item_end=>"</FONT></I></B>\n",
+            indent=>20
+        },
+        0=>{
+            inactive_item_start=>"<FONT SIZE=\"5\">",
+            inactive_item_end=>"</FONT>",
+            text_placeholder=>"<IMG SRC=\"<text>.gif\".gif>",
+            active_text_placeholder=>"<font color='red'><u><text></u></font>",
+                link_args=>"onmouseover='javascript thingie'",
+        },
+        1=>{
+            indent=>10
+        }
+      };
 
-       You can see an example of this here:
-       http://www.etsetb.upc.es/~frankie
+    Try it like this:
 
+      my $main=HTML::Widgets::Menu->new(format=>\%format
+                                        menu=>\@menu,
+                                        home=>"/users/frankie");
 
+    When you want to request the html that shows the menu you must call the
+    html method. It will build it using home, format and menu. The final
+    links will always be related to the current URL.
 
+    The pixel indentation is done using the url /img/point.gif.
 
-2000-09-28                 perl v5.5.30                         1
+    If you define an active format with an image like this:
+    active_item_start=> ' <IMG SRC="arrow.gif" WIDTH="10">'
 
+    this WIDTH is added to the indentation so it looks pretty cool in the
+    screen:
 
+           not active
+           another url
+        => this is the active
+           another one
 
+    The other items have been indented the width of the image, in addition
+    to the indent tag in the format.
 
+    The activation of the items work automagically reading the environment
+    variable provided by the web server: $ENV{REQUEST_URI}
 
-Menu(3)        User Contributed Perl Documentation        Menu(3)
+CONSTRUCTORS
+  new
 
+      Read the beggining of this doc.
 
-       This software is more mature that latest version. It works
-       fine for me and is used in production sites. The very
-       first version was almost unusable if you didn't had very
-       strict rules for creating the menu, now it's much improved
-       and useful. Tell me if you like it or not.
+  new_dbi
 
-       You can send me patches, bugs or suggestions.
+    This constructor lets you read the menu data from a table. Experimental,
+    poorly tested and incredibly bad documented.
 
-       This software is provided as is and you're using it at
-       your own risk.  You agree to use it with the same license
-       of perl itself.
+    *Example:*
 
-       Drawing a menu is a matter of :
-           the items of the menu
-           the format you want it to have
+      my $menu = HTML::Widgets::Menu -> new_dbi (
+                     dbh => $dbh,
+                   table => menu,
+                field_id => 'id',
+         field_id_parent => 'id_parent',
+              field_item => 'item',
+               field_url => 'url'
 
-       You also must supply the home directory for all the web
-       you want to add this menu.
+      );
 
-       IIIITTTTEEEEMMMMSSSS
+    Read test.pl in the sources if you want to see more.
 
-       The items is a list.
+METHODS
+  title
 
-       For example, a simple menu could be:
+    Returns a string suitable as title of the page. It uses the active items
+    of the menu for creating it.
 
-           my @menu=(
-                 homepage   =>'.',
-                 "my links" =>"links.html"
-           );
+        Products - Hardware - Mother Boards
 
-       You can add depth to the menu:
+    *arguments*
 
-           my @menu=(
-               homepage   => '.',
-               "my links" => {
-                         url=>"links/",
-                         menu=>[
-                               perl  =>"perl_link.html",
-                               "movies I like"=>'movies.html'
-                         ],
-                about=>"about.html"
-            );
+      You can pass an optional separator for the items. (default = '-')
 
-       For every level you add instead of the url you must supply
-       a reference to a hash with the url and the submenu.  Now
-       you can get this menu printed in html easily and get the
-       list of active items.
+  path
 
-       my
-       $main=HTML::Widgets::Menu->new(menu=>\@menu,home=>"/users/frankie/");
+    It returns a string with the path to the current items. Every item is
+    wrapped around its link.
 
-       print $main->_h_t_m_l_(_); # this renders the html my
-       @active_items= @{$main->active}; # list of active items
+       <a href="/products">products</a> / 
+           <a href="/products/hardware">hardware</a> /
+               <a href="/products/hardware/motherboards">motherboards</a>
 
+    *arguments*
 
+    You an pass an optional separator. Default '/'
 
+  html
 
-2000-09-28                 perl v5.5.30                         2
+    Renders the menu as html.
 
+  Active Items
 
+    The active method returns a usefull thing: the active items of the menu.
+    In the former example if the user is in the url: "movies.html" it will
+    return a reference to a list like this:
 
+        "my_links"=>"links"
+        "movies I like "=>"links/movies.html"
 
+    What can I do with the active items ?
 
-Menu(3)        User Contributed Perl Documentation        Menu(3)
+    once the menu is built you can retrieve its active items this way:
 
+        $menu->active;
 
-       If the url of the item is only the name of a directory
-       (the final / is not necessary), the path is added to the
-       submenu. For the example above you must write the files:
-           index.html
-           links/index.html
-           links/perl_link.thml
-           links/movies.html
-           about.html
-
-       The format is the way you tell how to show the items of
-       the menu It's a hash where you define the options.  There
-       should be a default entry and numbered entries for every
-       level, starting with 0.
+    This method returns an array with the items and links this way:
 
-       Options available (with defaults):
-         max_depth => 1,
-               # max number of depth shown if items are not
-       active
-         start => '', #html to put at the start of the level
-         end => '', #html to add at the end of the level
-         font=>'<FONT>',
-         active_item_start => '<B><I>',
-         active_item_end => '</B></I>',
-         inactive_item_start => '',
-         inactive_item_end => '',
-         text_placeholder => '<text>',
-                  # example : <IMG SRC="<text>.gif" ALT="<text>">
-                  #                     ------           ------
-         link_args=>'',
-                  # put javascript options here or other args
-                  # for the <A HREF tag
-         indent => 8,                # pixels for the indentation
+        item1 , link1 , item2, link2
 
-         auto_br => 1, # Adds a <br> at the end of every line [default 1]
+    You can use it to build a title or path like this:
 
-       Example: my %format={
-          default=>{
-               max_depth=>2,
-               font=>"<FONT SIZE=2>\n",
-               active_item_start=>"<IMG
-                   SRC=\"/users/frankie/img/blue_arrow.gif\"
-                   BORDER=0 WIDTH=6><B><I><FONT COLOR=\"BLUE\">",
-               active_item_end=>"</FONT></I></B>\n",
-               indent=>20
-           },
-           0=>{
-               inactive_item_start=>"<FONT SIZE=\"5\">",
-               inactive_item_end=>"</FONT>",
-               text_placeholder=>"<IMG SRC=\"<text>.gif\".gif>",
-               link_args=>"onmouseover='javascript thingie'",
-           },
-           1=>{
-               indent=>10
-           } };
+        print $menu->html; # that builds the menu
 
+        my $title="Main Title";
+        my $path="";
+        my $item;
+        foreach (@{$menu->active}) {
+            $item=$_ and next unless defined $item;
 
+                    $title.=" - $item";
 
-2000-09-28                 perl v5.5.30                         3
+                    $path.="/" if length $path;
+                    $path.="<A HREF=\"$_\">$item</A>";
 
+                    undef $item;
 
+            }
+            # now I have a title and path variables
 
+COOL USAGE
+    You can add tags to the format options that can be replaced when the
+    html is rendered. I'll say some examples:
 
+  Display an image near the item
 
-Menu(3)        User Contributed Perl Documentation        Menu(3)
+    You must have an image called like the item url. Say you have two main
+    options, make a gif for each one.
 
+       /img/icons/products.gif
+       /img/icons/services.gif
 
-       Try it like this:
+    The path and extension are not mandatory.
 
-       my $main=HTML::Widgets::Menu->new(format=>\%format
-                                           menu=>\@menu,
-                                           home=>"/users/frankie");
+    Then in the format options type:
 
-       When you want to request the html that shows the menu you
-       must call the html method. It will build it using home,
-       format and menu. The final links will always be related to
-       the current URL.
+      active_item_start =>'<img src="/icons/<url>.gif">'
 
-       The pixel indentation is done using the url
-       /img/point.gif.
+    The url tag will be replaced by the url of the item. It works also for
+    inactive_item_start, so you can have different images if it's inactive
+    or active.
 
-       If you define an active format with an image like this:
-           active_item_start=> ' <IMG SRC="arrow.gif"
-       WIDTH="10">'
+      active_item_start => '<img src="/icons/<url>_active.gif">',
+      inactive_item_start => '<img src="/icons/<url>_inactive.gif">',
 
-       this WIDTH is added to the indentation so it looks pretty
-       cool in the screen:
+EXPERIMENTAL OPTIONS
+    The experimental options won't make your site crash but may produce
+    heavy load. Feedback wellcome.
 
-              not active
-              another url
-           => this is the active
-              another one
+    Menus from databases is experimental, it hasn't been fully tested and
+    should be used at your own risk.
 
-       The other items have been indented the width of the image,
-       in addition to the indent tag in the format.
+    Authorisation is an expensive feature and should be used in low load
+    sites.
 
-       The activation of the items work automagically reading the
-       environment variable provided by the web server:
-       $ENV{REQUEST_URI}
+PLEASE
+    Please send documentation improvements, examples of sites using it are
+    wellcome. Please, tell me you're using it. I'll accept requests,
+    comments, suggestions, bug patches.
 
-       AAAAccccttttiiiivvvveeee IIIItttteeeemmmmssss
+AUTHOR
+    Francesc Guasch-Ortiz frankie@etsetb.upc.es
 
-       The active method returns a usefull thing: the active
-       items of the menu. In the former example if the user is in
-       the url:  "movies.html" it will return a reference to a
-       list like this:      "my_links"=>"links"      "movies I
-       like "=>"links/movies.html"
-
-       What can I do with the active items ?
-
-       once the menu is built you can retrieve its active items
-       this way:
-
-               $menu->active;
-
-       This method returns an array with the items and links this
-       way:
-
-               item1 , link1 , item2, link2
-
-       You can use it to build a title or path like this:
-
-
-
-2000-09-28                 perl v5.5.30                         4
-
-
-
-
-
-Menu(3)        User Contributed Perl Documentation        Menu(3)
-
-
-               print $menu->html; # that builds the menu
-
-               my $title="Main Title";
-               my $path="";
-               my $item;
-               foreach (@{$menu->active}) {
-                       $item=$_ and next unless defined $item;
-
-                       $title.=" - $item";
-
-                       $path.="/" if length $path;
-                       $path.="<A HREF=\"$_\">$item</A>";
-
-                       undef $item;
-
-               }
-               # now I have a title and path variables
-
-
-       PPPPLLLLEEEEAAAASSSSEEEE
-
-               Please, tell me you're using it. I'll accept requests, comments,
-               suggestions, bug patches.
-
-
-AAAAUUUUTTTTHHHHOOOORRRR
-       Francesc Guasch-Ortiz     frankie@etsetb.upc.es
-
-SSSSEEEEEEEE AAAALLLLSSSSOOOO
-       _p_e_r_l(1).  mod_perl
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-2000-09-28                 perl v5.5.30                         5
-
+SEE ALSO
+    perl(1). mod_perl
 

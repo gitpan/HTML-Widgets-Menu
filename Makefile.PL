@@ -4,4 +4,5 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'	=> 'HTML::Widgets::Menu',
     'VERSION_FROM' => 'Menu.pm', # finds $VERSION
+	'PREREQ_PM' => {DBI => 1.14 },
 );
